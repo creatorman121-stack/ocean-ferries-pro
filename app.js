@@ -32,8 +32,8 @@ window.DB = DB;
     safeSetJSON(DB_KEY, DB);
   } else {
     for (let key of Object.keys(DEFAULT_DB)) {
-      if (!(key in DB)) { DB[key] = JSON.parse(JSON.stringify(DEFAULT_DB[key])); continue; }
-      if (typeof DEFAULT_DB[key] === 'object' && !Array.isArray(DEFAULT_DB[key])) {
+      if (!(key in DB) || DB[key] === null || DB[key] === undefined) { DB[key] = JSON.parse(JSON.stringify(DEFAULT_DB[key])); continue; }
+      if (typeof DEFAULT_DB[key] === 'object' && !Array.isArray(DEFAULT_DB[key]) && typeof DB[key] === 'object' && DB[key] !== null) {
         for (let subKey of Object.keys(DEFAULT_DB[key])) {
           if (!(subKey in DB[key])) DB[key][subKey] = JSON.parse(JSON.stringify(DEFAULT_DB[key][subKey]));
         }

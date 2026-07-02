@@ -3,7 +3,7 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 
 const DB_KEY = 'off_baggage_v17';
-const DB_VERSION = 17;
+const DB_VERSION = 18;
 
 const DEFAULT_DB = {
   slabs: {

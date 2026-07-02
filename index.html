@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
+<meta name="description" content="Ocean Fast Ferries Pro - Professional baggage fee calculator, live vessel tracking, fares, schedules, bookings, route planner and operations tool">
+<meta name="theme-color" content="#f43f5e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="manifest" href="manifest.json?v=400">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛴️</text></svg>">
+<title>Ocean Fast Ferries Pro · V400</title>
+<link rel="stylesheet" href="styles.css?v=400">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+</head>
+
+<body>
+<div class="app">
+    <!-- Header -->
+    <header class="header">
+        <div class="hamburger" id="hamburger" onclick="toggleDrawer()" role="button" aria-label="Menu"><div></div><div></div><div></div></div>
+        <div class="brand" onclick="navigate('dashboard')">Ocean Fast Ferries Pro</div>
+        <div class="header-right">
+            <div class="header-clock" id="headerClock" onclick="showShiftTimer()" title="Tap for Shift Timer"></div>
+            <div class="toggle-dark" id="darkLightToggle" onclick="toggleTheme()" role="button" aria-label="Toggle theme">💡</div>
+            <span class="role-badge" id="roleBadge"></span>
+            <div class="notif-btn" id="notifBtn" onclick="toggleNotifCenter()" title="Notifications" role="button" aria-label="Notifications">🔔<span class="notif-dot" id="notifDot"></span></div>
+        </div>
+    </header>
+
+    <!-- Overlay & Drawer -->
+    <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+    <nav class="side-drawer" id="sideDrawer" aria-label="Main navigation">
+        <div class="drawer-close" onclick="closeDrawer()" role="button" aria-label="Close menu">✕</div>
+        <div class="drawer-brand">⛴️ Ocean Fast Ferries Pro</div>
+        <div class="drawer-menu" id="drawerMenu"></div>
+        <div class="drawer-footer">
+            <button class="drawer-admin-btn" id="drawerAdminBtn" onclick="showAdminLogin()">
+                🔒 Admin Mode
+            </button>
+            <button class="drawer-logout" id="drawerLogoutBtn" onclick="logout()" style="display:none">
+                🚪 Logout
+            </button>
+        </div>
+    </nav>
+
+    <!-- Views -->
+    <div id="view-dashboard" class="view active" role="main"></div>
+    <div id="view-calculator" class="view" role="region" aria-label="Calculator"></div>
+    <div id="view-analytics" class="view" role="region" aria-label="Analytics"></div>
+    <div id="view-fares" class="view" role="region" aria-label="Fares"></div>
+    <div id="view-schedules" class="view" role="region" aria-label="Schedules"></div>
+    <div id="view-history" class="view" role="region" aria-label="History"></div>
+    <div id="view-admin" class="view" role="region" aria-label="Admin"></div>
+    <div id="view-map" class="view" role="region" aria-label="Live Map"></div>
+    <div id="view-planner" class="view" role="region" aria-label="Route Planner"></div>
+    <div id="view-bookings" class="view" role="region" aria-label="Bookings"></div>
+    <div id="view-favorites" class="view" role="region" aria-label="Favorites"></div>
+</div>
+
+<!-- Bottom Navigation (mobile-first, V400 expanded) -->
+<nav class="bottom-nav" id="bottomNav" aria-label="Quick navigation">
+    <div class="bnav-item active" data-view="dashboard" onclick="navigate('dashboard')" role="button" tabindex="0">
+        <span class="bnav-icon">🏠</span><span class="bnav-label">Home</span>
+    </div>
+    <div class="bnav-item" data-view="calculator" onclick="navigate('calculator')" role="button" tabindex="0">
+        <span class="bnav-icon">🧮</span><span class="bnav-label">Calc</span>
+    </div>
+    <div class="bnav-item" data-view="planner" onclick="navigate('planner')" role="button" tabindex="0">
+        <span class="bnav-icon">🧭</span><span class="bnav-label">Plan</span>
+    </div>
+    <div class="bnav-item" data-view="bookings" onclick="navigate('bookings')" role="button" tabindex="0">
+        <span class="bnav-icon">🎟️</span><span class="bnav-label">Book</span>
+    </div>
+    <div class="bnav-item" data-view="map" onclick="navigate('map')" role="button" tabindex="0">
+        <span class="bnav-icon">🗺️</span><span class="bnav-label">Map</span>
+    </div>
+</nav>
+
+<!-- Floating Action Button -->
+<button class="action-menu-fab" id="actionMenuFab" onclick="toggleActionMenu()" aria-label="Quick actions">✚</button>
+<div class="action-menu-items" id="actionMenuItems">
+    <div class="action-item" onclick="showTally();toggleActionMenu()">
+        <span class="action-item-label">Tally</span>
+        <button class="action-item-btn tally">👤</button>
+    </div>
+    <div class="action-item" onclick="openFarePanel();toggleActionMenu()">
+        <span class="action-item-label">Fares</span>
+        <button class="action-item-btn fare">₱</button>
+    </div>
+    <div class="action-item" onclick="undoLastTransaction();toggleActionMenu()">
+        <span class="action-item-label">Undo</span>
+        <button class="action-item-btn undo">↶</button>
+    </div>
+    <div class="action-item" onclick="toggleChat();toggleActionMenu()">
+        <span class="action-item-label">AI Chat</span>
+        <button class="action-item-btn ai">🤖</button>
+    </div>
+    <div class="action-item" onclick="exportHistoryCSV();toggleActionMenu()">
+        <span class="action-item-label">Export</span>
+        <button class="action-item-btn export">📤</button>
+    </div>
+</div>
+
+<!-- Admin Login Modal -->
+<div class="admin-modal" id="adminModal" style="display:none">
+    <div class="admin-modal-box">
+        <h3>🔒 Admin Login</h3>
+        <p style="font-size:.75rem;color:var(--text3);margin-bottom:14px">Enter credentials to unlock admin tools</p>
+        <div class="input-group"><label>Username</label><input id="adminUser" placeholder="Enter username" autofocus></div>
+        <div class="input-group"><label>Password</label><input type="password" id="adminPass" placeholder="Enter password" onkeypress="if(event.key==='Enter')attemptAdminLogin()"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="primary block" onclick="attemptAdminLogin()">Login</button>
+            <button class="block" onclick="closeAdminModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Notification Center -->
+<div class="notif-center" id="notifCenter" style="display:none">
+    <div class="notif-header">
+        <span>🔔 Notifications</span>
+        <span style="cursor:pointer" onclick="toggleNotifCenter()">✕</span>
+    </div>
+    <div class="notif-body" id="notifBody">
+        <div class="notif-empty">No notifications yet</div>
+    </div>
+</div>
+
+<!-- Chat Panel -->
+<div class="chat-panel" id="chatPanel">
+    <div class="chat-header"><span>🤖 Genius Assistant · Gemini</span><span style="cursor:pointer" onclick="toggleChat()">✕</span></div>
+    <div class="chat-body" id="chatBody">
+        <div class="chat-bubble bot">Hello! I'm the Ocean Fast Ferries Pro genius AI. Ask me anything about baggage, fares, schedules, connections, bookings, or tourist tips.</div>
+    </div>
+    <div class="chat-input-wrapper">
+        <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎤</button>
+        <input id="chatInput" placeholder="Type here..." onkeypress="if(event.key==='Enter')sendAIChat()">
+        <button class="primary sm" onclick="sendAIChat()" id="sendBtn">Send</button>
+    </div>
+</div>
+
+<!-- Status Badges -->
+<div class="offline-badge" id="offlineBadge">📡 Offline</div>
+<div class="alert-badge" id="alertBadge"><span class="alert-dot"></span><span class="alert-text"></span></div>
+
+<!-- External Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<!-- App Modules -->
+<script src="data.js?v=400"></script>
+<script src="utils.js?v=400"></script>
+<script src="app.js?v=400"></script>
+<script src="map.js?v=400"></script>
+
+<!-- Register Real Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SW_UPDATED') {
+      console.log('New SW version activated:', event.data.version);
+      window.location.reload(true);
+    }
+  });
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    console.log('SW registered from file');
+    reg.update();
+  }).catch(e => console.log('SW registration failed:', e));
+}
+(function purgeOldStorage() {
+  const oldKeys = ['off_baggage_v15','off_baggage_v14','off_baggage_v13','off_baggage_v12','off_baggage_v11','off_baggage_v10'];
+  oldKeys.forEach(k => { if (localStorage.getItem(k)) localStorage.removeItem(k); });
+})();
+</script>
+</body>
+</html>

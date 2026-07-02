@@ -1,71 +1,83 @@
-/* Ocean Fast Ferries Pro · V400 — Service Worker */
-const CACHE = 'off-v400-cache';
-const APP_VERSION = 'V400';
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ocean Fast Ferries · V500 ULTRA — Service Worker
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+const CACHE = 'off-v500-cache';
+const APP_VERSION = 'V500';
 const BASE = '/ocean-ferries-pro';
-const ASSETS = [BASE+'/', BASE+'/index.html', BASE+'/styles.css', BASE+'/app.js', BASE+'/data.js', BASE+'/utils.js', BASE+'/map.js', BASE+'/manifest.json'];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {})
+const ASSETS = [
+  `${BASE}/`,
+  `${BASE}/index.html`,
+  `${BASE}/styles.css`,
+  `${BASE}/app.js`,
+  `${BASE}/data.js`,
+  `${BASE}/utils.js`,
+  `${BASE}/map.js`,
+  `${BASE}/sw.js`,
+  `${BASE}/manifest.json`
+];
+
+const CDN_HOSTS = [
+  'unpkg.com',
+  'cdn.jsdelivr.net',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com'
+];
+
+// Install: pre-cache app assets
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
+  console.log(`SW ${APP_VERSION} installed`);
 });
 
-self.addEventListener('activate', e => {
-  /* Delete ALL old caches — forces complete cache clear on version bump */
-  e.waitUntil(
-    caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))))
-      .then(() => self.clients.matchAll())
-      .then(clients => {
-        clients.forEach(client => {
-          client.postMessage({ type: 'SW_UPDATED', version: APP_VERSION });
-        });
-      })
-      .then(() => self.clients.claim())
+// Activate: clean old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
+  // Notify clients of version update
+  self.clients.matchAll().then(clients => {
+    clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: APP_VERSION }));
+  });
+  console.log(`SW ${APP_VERSION} activated`);
 });
 
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  const url = new URL(e.request.url);
-
-  /* Ignore non-GET and chrome-extension requests */
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-
-  const isAppAsset = url.pathname.endsWith('.js') || url.pathname.endsWith('.css') ||
-                     url.pathname.endsWith('.html') || url.pathname === '/' ||
-                     url.pathname.endsWith('/manifest.json');
+// Fetch: network-first for app assets, stale-while-revalidate for CDN
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  const isAppAsset = ASSETS.some(a => url.pathname.endsWith(a.replace(BASE, '')));
+  const isCDN = CDN_HOSTS.some(h => url.hostname.includes(h));
 
   if (isAppAsset) {
-    /* Network-first for app assets — ensures users always get the latest code */
-    e.respondWith(
-      fetch(e.request).then(res => {
-        if (res.ok) {
-          const cl = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, cl));
-        }
-        return res;
-      }).catch(() => caches.match(e.request).then(r => r || caches.match(BASE+'/index.html')))
+    // Network-first for app assets (to get latest version)
+    event.respondWith(
+      fetch(event.request).then(response => {
+        const clone = response.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, clone));
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+  } else if (isCDN) {
+    // Stale-while-revalidate for CDN
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        const fetchPromise = fetch(event.request).then(response => {
+          const clone = response.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, clone));
+          return response;
+        }).catch(() => cached);
+        return cached || fetchPromise;
+      })
     );
   } else {
-    /* Stale-while-revalidate for CDN resources — serve cache instantly, update in background */
-    const cached = caches.match(e.request);
-    const fetched = fetch(e.request).then(res => {
-      if (res.ok) {
-        const cl = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, cl));
-      }
-      return res;
-    }).catch(() => caches.match(BASE+'/index.html'));
-    e.respondWith(
-      cached.then(r => r || fetched)
+    // Default: try network, fall back to cache
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
     );
-  }
-});
-
-/* Listen for force-clear message from the app */
-self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'FORCE_CLEAR_CACHE') {
-    caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))));
   }
 });

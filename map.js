@@ -4,9 +4,9 @@
 
 (function(){
   'use strict';
-  var VERSION='V400 Live Map Pro Weather Ops';
-  var DELAY_KEY='oj_v400_map_delays';
-  var FILTER_KEY='oj_v400_map_filter';
+  var VERSION='V500 Live Map Pro Weather Ops';
+  var DELAY_KEY='oj_v500_map_delays';
+  var FILTER_KEY='oj_v500_map_filter';
   var selectedId=null, activeFilter=localStorage.getItem(FILTER_KEY)||'cebu_departures';
   var map=null, refreshTimer=null, layers={markers:[],routes:[],ports:[],labels:[],weather:[]}
   var weatherCache=null, weatherLastFetch=0;
@@ -66,12 +66,12 @@
   function selectTrip(idv,skipFocus){var t=makeTrips().filter(function(x){return x.id===idv})[0];if(!t)return;selectedId=idv;var detail=id('oj126Detail');if(detail)detail.innerHTML=detailHtml(t);if(!skipFocus&&map)map.setView(t.pos,10,{animate:false})}
   function applyDelay(){var sid=id('oj126DelayTrip')?id('oj126DelayTrip').value:'';var val=Number(id('oj126DelayMin')?id('oj126DelayMin').value:0)||0;if(!sid)return;var d=delayMap();if(val<=0)delete d[sid];else d[sid]=val;saveDelays(d);toastMsg('Delay updated');refresh()}
   function resetDelays(){if(confirm('Reset all manual map delays?')){localStorage.removeItem(DELAY_KEY);toastMsg('Map delays reset');refresh()}}
-  function exportCSV(){var rows=[['Date','Vessel','Route','Departure','Arrival','Status','Progress %','ETA minutes','Delay minutes','Fare Summary','Schedule Mode']];todaysTrips().forEach(function(t){rows.push([new Date().toLocaleDateString('en-PH'),t.vessel,t.title,fmtTime(t.actualDep),fmtTime(t.actualArr),t.status,t.progressPct,t.etaMin,t.delay,fareSummary(t),'Schedule-based estimated position'])});download('oceanjet_v400_vessel_manifest.csv',csv(rows),'text/csv')}
+  function exportCSV(){var rows=[['Date','Vessel','Route','Departure','Arrival','Status','Progress %','ETA minutes','Delay minutes','Fare Summary','Schedule Mode']];todaysTrips().forEach(function(t){rows.push([new Date().toLocaleDateString('en-PH'),t.vessel,t.title,fmtTime(t.actualDep),fmtTime(t.actualArr),t.status,t.progressPct,t.etaMin,t.delay,fareSummary(t),'Schedule-based estimated position'])});download('oceanjet_v500_vessel_manifest.csv',csv(rows),'text/csv')}
   function copyTrip(idv){var t=makeTrips().filter(function(x){return x.id===idv})[0];if(!t)return;var text='OceanJet Vessel Summary\n'+tripLine(t)+'\nStatus: '+t.status+'\nETA: '+(t.etaMin?t.etaMin+' minutes':'Arrived')+'\nFare: '+fareSummary(t)+'\nMode: Schedule-based estimated position';if(navigator.clipboard)navigator.clipboard.writeText(text);toastMsg('Vessel summary copied')}
   function askTrip(idv){var t=makeTrips().filter(function(x){return x.id===idv})[0];if(!t)return;var prompt='Summarize this OceanJet vessel for staff: '+tripLine(t)+'. Status '+t.status+', ETA '+(t.etaMin?t.etaMin+' minutes':'arrived')+'. Mention that map position is schedule-based, not GPS.';try{var panel=id('chatPanel');var input=id('chatInput');if(panel&&!panel.classList.contains('open')&&typeof toggleChat==='function')toggleChat();if(input){input.value=prompt;input.focus();toastMsg('Gemini prompt ready. Tap Send.');return}}catch(e){}if(navigator.clipboard)navigator.clipboard.writeText(prompt);toastMsg('Gemini prompt copied')}
   function refresh(){makeTrips();renderAll();if(map)renderMapLayers()}
 
-  /* V400: Weather overlay functions */
+  /* V500: Weather overlay functions */
   function weatherIconForCode(code){try{return getWeatherIcon(code)}catch(e){return '\u26c5'}}
   function seaConditionForWeather(code,wind){try{return getSeaCondition(code,wind)}catch(e){return {level:'calm',color:'#22c55e',icon:'\u26c5',advisory:'Normal conditions'}}}
   var weatherOverlayVisible=true;

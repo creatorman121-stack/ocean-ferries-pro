@@ -1,18 +1,21 @@
 {
-  "name": "Ocean Fast Ferries Pro",
-  "short_name": "OFF Pro V400",
-  "description": "Professional baggage fee calculator, bookings, route planner, weather, multi-currency and operations tool for Ocean Fast Ferries",
+  "name": "Ocean Fast Ferries Pro Ultra",
+  "short_name": "OFF Pro V500",
+  "description": "Professional ferry operations tool with baggage calculator, live vessel tracking, weather overlay, bookings, route planner, expense tracker, trip checklists, group discounts, multi-currency, tide info, profiles and more",
   "start_url": "/ocean-ferries-pro/",
   "scope": "/ocean-ferries-pro/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#070b19",
   "theme_color": "#f43f5e",
-  "orientation": "portrait",
+  "lang": "en",
+  "categories": ["travel", "business", "utilities"],
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛴️</text></svg>",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

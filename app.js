@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Ocean Fast Ferries · V400 PRO — Application Logic (MAJOR UPGRADE)
+   Ocean Fast Ferries · V500 ULTRA — Application Logic (MAJOR UPGRADE)
    ══════════════════════════════════════════════════════════════════════════ */
 
 // ── Database Init (with safe storage) ──
@@ -40,6 +40,11 @@ if (DB.darkMode === undefined) DB.darkMode = false;
 if (!DB.currency) DB.currency = 'PHP';
 if (!DB.bookings) DB.bookings = [];
 if (!DB.favorites) DB.favorites = [];
+if (!DB.profiles) DB.profiles = [];
+if (!DB.activeProfile) DB.activeProfile = null;
+if (!DB.expenses) DB.expenses = [];
+if (!DB.checklistState) DB.checklistState = {};
+if (!DB.departureAlerts) DB.departureAlerts = [];
 
 const saveDB = () => safeSetJSON(DB_KEY, DB);
 applyConnectingPassengerFares();
@@ -140,7 +145,10 @@ function buildDrawerMenu() {
     { view:'schedules',  icon:'🕐', label:'Schedules' },
     { view:'bookings',   icon:'🎫', label:'Bookings' },
     { view:'history',    icon:'📋', label:'History' },
-    { view:'favorites',  icon:'⭐', label:'Favorites' }
+    { view:'favorites',  icon:'⭐', label:'Favorites' },
+    { view:'expenses',   icon:'💸', label:'Expense Tracker' },
+    { view:'checklist',  icon:'📋', label:'Trip Checklist' },
+    { view:'profiles',   icon:'🗂️', label:'Profiles' }
   ];
   if (currentRole) items.push({ view:'admin', icon:'🔒', label:'Admin Panel' });
   $('drawerMenu').innerHTML = items.map(i =>
@@ -170,7 +178,7 @@ function showView(name) {
   const bnav = document.querySelector(`.bnav-item[data-view="${name}"]`);
   if (bnav) bnav.classList.add('active');
   switch(name) {
-    case 'dashboard':  buildDashboard(); break;
+    case 'dashboard':  buildDashboard(); setTimeout(enhanceDashboardV500, 100); break;
     case 'calculator': buildCalculator(); break;
     case 'planner':    buildPlanner(); break;
     case 'analytics':  buildAnalytics(); break;
@@ -180,6 +188,9 @@ function showView(name) {
     case 'admin':      buildAdmin(); break;
     case 'map':        buildMap(); break;
     case 'bookings':   buildBookings(); break;
+    case 'expenses':   buildExpenses(); break;
+    case 'checklist':  buildChecklist(); break;
+    case 'profiles':   buildProfiles(); break;
     case 'favorites':  buildFavorites(); break;
   }
   updateDrawerBadges();
@@ -754,6 +765,8 @@ function executePlanRoute() {
 
 // ── Booking System (NEW V400) ──
 function buildBookings() {
+  // V500 Enhanced - redirect to V500 version
+  buildBookingsV500(); return;
   const bookings = DB.bookings || [];
   $('view-bookings').innerHTML = `
     <div class="card glow">
@@ -1194,7 +1207,7 @@ function buildAdmin() {
         <div style="color:var(--text2)">Total Txns: <b>${txs.length}</b></div>
         <div style="color:var(--text2)">Shift: <b style="color:var(--neon-green)">${uptime}</b></div>
         <div style="color:var(--text2)">Online: <b style="color:${navigator.onLine?'var(--neon-green)':'var(--neon-pink)'}">${navigator.onLine?'Yes':'Offline'}</b></div>
-        <div style="color:var(--text2)">Version: <b>V400 Pro</b></div>
+        <div style="color:var(--text2)">Version: <b>V500 Ultra</b></div>
         <div style="color:var(--text2)">SW: <b style="color:var(--neon-cyan)">${'serviceWorker' in navigator?'Active':'N/A'}</b></div>
       </div>
     </div>
@@ -1516,7 +1529,7 @@ function sendAIChat() {
   const model=DB.aiSettings.model||'gemini-2.0-flash';
   fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({contents:chatContext,systemInstruction:{parts:[{text:'You are the Ocean Fast Ferries Pro AI assistant. Help with baggage fees, routes, schedules, fares, bookings, weather, sea conditions, and operational questions. Be concise and professional. Routes: Cebu-Tagbilaran, Cebu-Ormoc, Cebu-Getafe, Cebu-Palompon, Cebu-Maasin, Cebu-Dumaguete (via Tagbilaran), Cebu-Surigao (via Maasin), Cebu-Siquijor (via Tagbilaran). Slab rates apply for excess baggage. V400 Pro features: multi-item calculator, route planner, booking system, multi-currency, weather overlay, favorites.'}]}})
+    body:JSON.stringify({contents:chatContext,systemInstruction:{parts:[{text:'You are the Ocean Fast Ferries Pro AI assistant. Help with baggage fees, routes, schedules, fares, bookings, weather, sea conditions, and operational questions. Be concise and professional. Routes: Cebu-Tagbilaran, Cebu-Ormoc, Cebu-Getafe, Cebu-Palompon, Cebu-Maasin, Cebu-Dumaguete (via Tagbilaran), Cebu-Surigao (via Maasin), Cebu-Siquijor (via Tagbilaran). Slab rates apply for excess baggage. V500 Ultra features: multi-item calculator, route planner, booking system, multi-currency, weather overlay, favorites.'}]}})
   }).then(r=>r.json()).then(data=>{
     const ld=$('chatLoading');if(ld)ld.remove();
     const text=data?.candidates?.[0]?.content?.parts?.[0]?.text||'Sorry, I could not generate a response.';
@@ -1578,6 +1591,580 @@ function updateDrawerBadges() {
 }
 
 // ── Initialization ──
+
+// ══════════════════════════════════════════════════════════════
+// V500 ULTRA — New Views & Enhanced Features
+// ══════════════════════════════════════════════════════════════
+
+// ── Expense Tracker View (V500) ──
+function buildExpenses() {
+  const v = $('view-expenses'); if (!v) return;
+  const trips = [...new Set((DB.expenses||[]).map(e => e.tripId))];
+  const selectedTrip = v.dataset.trip || 'general';
+  const totals = getExpenseTotals(selectedTrip);
+  const expenses = getExpensesByTrip(selectedTrip);
+  
+  let tripOptions = trips.map(t => 
+    `<option value="${t}" ${t===selectedTrip?'selected':''}>${t==='general'?'General':t}</option>`
+  ).join('');
+  if (!tripOptions) tripOptions = '<option value="general">General</option>';
+
+  v.innerHTML = `
+    <div class="card">
+      <h2>💸 Expense Tracker</h2>
+      <p style="color:var(--text2);font-size:.8rem;margin-bottom:12px">Track all travel expenses by category</p>
+      <div class="form-row">
+        <label>Trip</label>
+        <select id="expenseTripSelect" onchange="changeExpenseTrip(this.value)">
+          ${tripOptions}
+        </select>
+        <button class="sm" onclick="newExpenseTrip()" style="margin-left:8px">+ New</button>
+      </div>
+      <div class="expense-total-bar">
+        <span>Total: ${fmtCurrency(totals.total, DB.currency)}</span>
+        <span>${totals.count} expense${totals.count!==1?'s':''}</span>
+      </div>
+      <div class="expense-category-breakdown">
+        ${EXPENSE_CATEGORIES.map(cat => {
+          const amount = totals.byCategory[cat.key] || 0;
+          const pct = totals.total > 0 ? (amount/totals.total*100) : 0;
+          return `<div class="expense-cat-item">
+            <span class="expense-cat-icon">${cat.icon}</span>
+            <span class="expense-cat-label">${cat.label}</span>
+            <div class="expense-cat-bar-wrap"><div class="expense-cat-bar" style="width:${pct}%;background:${cat.color}"></div></div>
+            <span class="expense-cat-amount">${fmtCurrency(amount, DB.currency)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Add Expense</h3>
+      <div class="form-row"><label>Category</label>
+        <select id="expCat">${EXPENSE_CATEGORIES.map(c=>`<option value="${c.key}">${c.icon} ${c.label}</option>`).join('')}</select>
+      </div>
+      <div class="form-row"><label>Amount (${CURRENCY_SYMBOLS[DB.currency]||'₱'})</label>
+        <input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="form-row"><label>Description</label>
+        <input id="expDesc" placeholder="e.g. Lunch at terminal">
+      </div>
+      <button class="accent block" onclick="submitExpense()">Add Expense</button>
+    </div>
+
+    <div class="card">
+      <h3>Expense Log</h3>
+      ${expenses.length ? expenses.slice().reverse().map(e => {
+        const cat = EXPENSE_CATEGORIES.find(c=>c.key===e.category) || EXPENSE_CATEGORIES[7];
+        return `<div class="expense-log-item">
+          <span class="expense-log-icon" style="background:${cat.color}22;color:${cat.color}">${cat.icon}</span>
+          <div class="expense-log-info">
+            <div class="expense-log-desc">${e.description || cat.label}</div>
+            <div class="expense-log-meta">${cat.label} · ${new Date(e.date).toLocaleDateString()}</div>
+          </div>
+          <span class="expense-log-amount">${fmtCurrency(e.amount, DB.currency)}</span>
+          <button class="expense-log-del" onclick="delExpense(${e.id})">✕</button>
+        </div>`;
+      }).join('') : '<div class="expense-empty">No expenses recorded yet</div>'}
+    </div>
+
+    <div class="card">
+      <h3>Export Expenses</h3>
+      <button class="block" onclick="exportExpensesCSV()">📥 Export to CSV</button>
+    </div>
+  `;
+}
+
+function changeExpenseTrip(tripId) {
+  const v = $('view-expenses'); if(v) v.dataset.trip = tripId;
+  buildExpenses();
+}
+
+function newExpenseTrip() {
+  const name = prompt('Enter trip name (e.g. Cebu-Bohol Trip):');
+  if (!name) return;
+  const v = $('view-expenses'); if(v) v.dataset.trip = name;
+  if (!DB.expenses) DB.expenses = [];
+  buildExpenses();
+  toast('Trip "' + name + '" created');
+}
+
+function submitExpense() {
+  const cat = $('expCat')?.value || 'other';
+  const amount = parseFloat($('expAmount')?.value);
+  const desc = $('expDesc')?.value || '';
+  if (!amount || amount <= 0) { toast('Enter a valid amount'); return; }
+  const v = $('view-expenses');
+  const tripId = v?.dataset.trip || 'general';
+  addExpense(tripId, cat, amount, desc);
+  buildExpenses();
+  toast('Expense added: ' + fmtCurrency(amount, DB.currency));
+  haptic([10]);
+}
+
+function delExpense(id) {
+  removeExpense(id);
+  buildExpenses();
+  toast('Expense removed');
+}
+
+function exportExpensesCSV() {
+  const expenses = DB.expenses || [];
+  if (!expenses.length) { toast('No expenses to export'); return; }
+  const rows = [['Date','Trip','Category','Description','Amount','Currency']];
+  expenses.forEach(e => {
+    rows.push([new Date(e.date).toLocaleDateString(), e.tripId, e.category, e.description, e.amount.toFixed(2), e.currency||'PHP']);
+  });
+  exportCSV(rows, 'ocean_ferries_expenses_' + receiptFileStamp() + '.csv');
+  toast('Expenses exported');
+}
+
+// ── Trip Checklist View (V500) ──
+function buildChecklist() {
+  const v = $('view-checklist'); if (!v) return;
+  const selectedPort = v.dataset.port || 'cebu';
+  const info = TRIP_CHECKLISTS[selectedPort];
+  if (!info) { v.innerHTML = '<div class="card"><h2>📋 Trip Checklist</h2><p>Select a port above</p></div>'; return; }
+  
+  const savedChecks = DB.checklistState?.[selectedPort] || {};
+  
+  v.innerHTML = `
+    <div class="card">
+      <h2>📋 Trip Checklist</h2>
+      <p style="color:var(--text2);font-size:.8rem;margin-bottom:12px">Pre-departure preparation for ${titleCase(selectedPort)}</p>
+      <div class="form-row">
+        <label>Select Port</label>
+        <select onchange="changeChecklistPort(this.value)">
+          ${Object.keys(TRIP_CHECKLISTS).map(p => `<option value="${p}" ${p===selectedPort?'selected':''}>${titleCase(p)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="checklist-terminal">
+        <span class="checklist-terminal-icon">📍</span>
+        <span class="checklist-terminal-name">${info.terminal}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📄 Required Documents</h3>
+      <div class="checklist-items">
+        ${info.documents.map((doc, i) => {
+          const key = 'doc_'+i;
+          const checked = savedChecks[key];
+          return `<label class="checklist-item ${checked?'checked':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="toggleChecklist('${selectedPort}','${key}',this.checked)">
+            <span class="checklist-box"></span>
+            <span class="checklist-text">${doc}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💡 Travel Tips</h3>
+      <div class="checklist-tips">
+        ${info.tips.map(tip => `<div class="checklist-tip-item">💡 ${tip}</div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🔗 Available Connections</h3>
+      <div class="checklist-connections">
+        ${info.connections.map(conn => {
+          const [dest, time] = conn.split(' (');
+          return `<div class="checklist-conn-item" onclick="navigate('planner')">
+            <span class="checklist-conn-icon">⛴️</span>
+            <span>${conn}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🌙 Tide & Sun Info</h3>
+      <div id="tideInfo">Loading tide info...</div>
+    </div>
+
+    <div class="card">
+      <button class="accent block" onclick="shareChecklist()">📤 Share Checklist</button>
+      <button class="block" onclick="resetChecklist('${selectedPort}')" style="margin-top:8px">🔄 Reset Checklist</button>
+    </div>
+  `;
+  
+  // Load tide info
+  const portCoords = PORTS[selectedPort];
+  if (portCoords) {
+    const tide = estimateTide(selectedPort, new Date());
+    const tideEl = $('tideInfo');
+    if (tideEl) {
+      tideEl.innerHTML = `
+        <div class="tide-card">
+          <div class="tide-row"><span>🌙 ${tide.moonPhase}</span><span>Illumination: ${tide.moonIllumination}</span></div>
+          <div class="tide-row"><span>🌊 ${tide.tideType}</span><span>${tide.tideRange}</span></div>
+          <div class="tide-row"><span>🌅 Sunrise</span><span>${tide.sunrise}</span></div>
+          <div class="tide-row"><span>🌇 Sunset</span><span>${tide.sunset}</span></div>
+          <div class="tide-row"><span>☀️ Daylight</span><span>${tide.daylightHours}</span></div>
+          <div class="tide-row"><span>🔵 High Tide ~1</span><span>${tide.approximateHighTide1}</span></div>
+          <div class="tide-row"><span>⚪ Low Tide ~1</span><span>${tide.approximateLowTide1}</span></div>
+          <div class="tide-row"><span>🔵 High Tide ~2</span><span>${tide.approximateHighTide2}</span></div>
+          <div class="tide-advisory">${tide.advisory}</div>
+        </div>
+      `;
+    }
+  }
+}
+
+function changeChecklistPort(port) {
+  const v = $('view-checklist'); if(v) v.dataset.port = port;
+  buildChecklist();
+}
+
+function toggleChecklist(port, key, checked) {
+  if (!DB.checklistState) DB.checklistState = {};
+  if (!DB.checklistState[port]) DB.checklistState[port] = {};
+  DB.checklistState[port][key] = checked;
+  saveDB();
+  // Update visual
+  const item = event.target.closest('.checklist-item');
+  if (item) item.classList.toggle('checked', checked);
+  haptic([8]);
+}
+
+function resetChecklist(port) {
+  if (!confirm('Reset all checklist items?')) return;
+  DB.checklistState[port] = {};
+  saveDB();
+  buildChecklist();
+  toast('Checklist reset');
+}
+
+function shareChecklist() {
+  const port = $('view-checklist')?.dataset.port || 'cebu';
+  const info = TRIP_CHECKLISTS[port];
+  if (!info) return;
+  const savedChecks = DB.checklistState?.[port] || {};
+  let text = `📋 Ocean Fast Ferries - Trip Checklist (${titleCase(port)})\n\n`;
+  text += `📍 Terminal: ${info.terminal}\n\n📄 Documents:\n`;
+  info.documents.forEach((d,i) => { text += `${savedChecks['doc_'+i]?'✅':'⬜'} ${d}\n`; });
+  text += `\n💡 Tips:\n`;
+  info.tips.forEach(t => { text += `• ${t}\n`; });
+  text += `\n🔗 Connections:\n`;
+  info.connections.forEach(c => { text += `• ${c}\n`; });
+  
+  if (navigator.share) {
+    navigator.share({ title: 'Trip Checklist', text });
+  } else {
+    const blob = new Blob([text], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'checklist_' + port + '.txt';
+    a.click();
+    toast('Checklist downloaded');
+  }
+}
+
+// ── Profiles View (V500) ──
+function buildProfiles() {
+  const v = $('view-profiles'); if (!v) return;
+  const profiles = DB.profiles || [];
+  const active = getActiveProfile();
+  
+  v.innerHTML = `
+    <div class="card">
+      <h2>🗂️ Operator Profiles</h2>
+      <p style="color:var(--text2);font-size:.8rem;margin-bottom:12px">Manage named profiles with separate transaction tracking</p>
+      ${active ? `<div class="profile-active">
+        <span class="profile-active-dot"></span>
+        <span>Active: <strong>${active.name}</strong> (${active.role})</span>
+      </div>` : `<div class="profile-inactive">No active profile</div>`}
+    </div>
+
+    <div class="card">
+      <h3>Create Profile</h3>
+      <div class="form-row"><label>Name</label><input id="profileName" placeholder="e.g. Maria Santos"></div>
+      <div class="form-row"><label>Role</label>
+        <select id="profileRole">
+          <option value="cashier">Cashier</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="manager">Manager</option>
+        </select>
+      </div>
+      <button class="accent block" onclick="createNewProfile()">Create Profile</button>
+    </div>
+
+    <div class="card">
+      <h3>All Profiles</h3>
+      ${profiles.length ? profiles.map(p => `
+        <div class="profile-item ${p.id===DB.activeProfile?'active-profile':''}">
+          <div class="profile-info">
+            <div class="profile-name">${p.name}</div>
+            <div class="profile-role">${titleCase(p.role)} · ${p.transactionCount||0} txns · ${fmtCurrency(p.totalRevenue||0, DB.currency)}</div>
+            <div class="profile-date">Created: ${new Date(p.createdAt).toLocaleDateString()}</div>
+          </div>
+          <div class="profile-actions">
+            <button class="sm ${p.id===DB.activeProfile?'accent':''}" onclick="switchToProfile(${p.id})">${p.id===DB.activeProfile?'Active':'Switch'}</button>
+            <button class="sm" onclick="deleteProfile(${p.id})" style="color:var(--neon-red)">Delete</button>
+          </div>
+        </div>
+      `).join('') : '<div class="profile-empty">No profiles created yet</div>'}
+    </div>
+  `;
+}
+
+function createNewProfile() {
+  const name = $('profileName')?.value?.trim();
+  const role = $('profileRole')?.value;
+  if (!name) { toast('Enter a profile name'); return; }
+  createProfile(name, role);
+  buildProfiles();
+  toast('Profile "' + name + '" created');
+  haptic([10]);
+}
+
+function switchToProfile(id) {
+  switchProfile(id);
+  buildProfiles();
+  const p = getActiveProfile();
+  toast('Switched to ' + (p?.name || 'profile'));
+  updateDrawerBadges();
+}
+
+function deleteProfile(id) {
+  if (!confirm('Delete this profile?')) return;
+  DB.profiles = (DB.profiles||[]).filter(p => p.id !== id);
+  if (DB.activeProfile === id) DB.activeProfile = DB.profiles.length ? DB.profiles[0].id : null;
+  saveDB();
+  buildProfiles();
+  toast('Profile deleted');
+}
+
+// ── Enhanced Booking with Group Discount & Sharing (V500) ──
+// Override the existing buildBookings to add group discount + share
+function buildBookingsV500() {
+  const v = $('view-bookings'); if (!v) return;
+  const bookings = DB.bookings || [];
+  
+  v.innerHTML = `
+    <div class="card">
+      <h2>🎟️ Bookings</h2>
+      <p style="color:var(--text2);font-size:.8rem;margin-bottom:12px">Reserve your ferry trip with group discounts</p>
+      <div class="form-row"><label>Route</label>
+        <select id="bookRoute" onchange="onBookRouteChange()">
+          ${Object.keys(DB.schedules||{}).map(k => `<option value="${k}">${DB.schedules[k].title}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row"><label>Name</label><input id="bookName" placeholder="Passenger name"></div>
+      <div class="form-row"><label>Class</label>
+        <select id="bookClass">
+          ${FARE_CLASSES.map(c => `<option value="${c}">${FARE_CLASS_LABELS[c]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row"><label>Passengers</label>
+        <input type="number" id="bookPax" value="1" min="1" max="50" onchange="updateGroupDiscount()">
+      </div>
+      <div id="groupDiscountInfo" class="group-discount-info"></div>
+      <div class="form-row"><label>Trip</label>
+        <select id="bookTrip"></select>
+      </div>
+      <div class="form-row"><label>Date</label>
+        <input type="date" id="bookDate" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div id="travelTimeInfo" class="travel-time-info"></div>
+      <button class="accent block" onclick="makeBookingV500()">🎟️ Book Now</button>
+    </div>
+
+    <div class="card">
+      <h3>Upcoming Bookings</h3>
+      ${bookings.filter(b=>!b.cancelled).length ? bookings.filter(b=>!b.cancelled).map((b,i) => {
+        const fare = getPassengerFare(b.route) || {};
+        const groupDisc = calcGroupDiscount(b.pax||1, (fare[b.cls]||0)*(b.pax||1));
+        return `<div class="booking-item">
+          <div class="booking-route">${DB.schedules?.[b.route]?.title || b.route}</div>
+          <div class="booking-fare">${fmtCurrency((fare[b.cls]||0)*(b.pax||1) - groupDisc.amount, DB.currency)} ${groupDisc.rate>0?'<span class="group-badge">'+groupDisc.label+'</span>':''}</div>
+          <div class="booking-meta">${b.name} · ${b.pax||1} pax · ${FARE_CLASS_LABELS[b.cls]||b.cls} · ${b.date||'TBD'}</div>
+          <div class="booking-ref">Ref: ${b.ref}</div>
+          <div class="booking-actions">
+            <button class="sm" onclick="viewBookingQR(${bookings.indexOf(b)})">QR</button>
+            <button class="sm" onclick="shareBooking(${bookings.indexOf(b)})">📤 Share</button>
+            <button class="sm" onclick="cancelBooking(${bookings.indexOf(b)})" style="color:var(--neon-red)">Cancel</button>
+          </div>
+        </div>`;
+      }).join('') : '<div class="booking-empty">No active bookings</div>'}
+    </div>
+  `;
+  
+  onBookRouteChange();
+}
+
+function onBookRouteChange() {
+  const routeKey = $('bookRoute')?.value;
+  if (!routeKey) return;
+  const schedule = DB.schedules?.[routeKey];
+  if (!schedule) return;
+  const tripSelect = $('bookTrip');
+  if (tripSelect) {
+    tripSelect.innerHTML = schedule.trips.map((t,i) => 
+      `<option value="${i}">${t.dep} → ${t.arr} (${t.vessel})</option>`
+    ).join('');
+  }
+  updateGroupDiscount();
+  // Show travel time estimate
+  const ttInfo = $('travelTimeInfo');
+  if (ttInfo) {
+    const est = estimateTravelTime(routeKey);
+    if (est) {
+      ttInfo.innerHTML = `<div class="travel-time-card">
+        <span>⏱️ Est. Travel Time</span>
+        <strong>${fmtTravelTime(est.totalMinutes)}</strong>
+        ${est.type !== 'direct' ? `<div class="travel-time-legs">${est.legs.map(l => 
+          `<div class="travel-leg">${titleCase(l.route.replace(/_/g,' → '))} — ${fmtTravelTime(l.minutes)}${l.wait ? ' + '+l.wait+'min wait':''}</div>`
+        ).join('')}</div>` : ''}
+      </div>`;
+    }
+  }
+}
+
+function updateGroupDiscount() {
+  const pax = parseInt($('bookPax')?.value) || 1;
+  const routeKey = $('bookRoute')?.value;
+  const cls = $('bookClass')?.value || 'TC/OA';
+  const fare = getPassengerFare(routeKey) || {};
+  const totalFare = (fare[cls]||0) * pax;
+  const disc = calcGroupDiscount(pax, totalFare);
+  const info = $('groupDiscountInfo');
+  if (info) {
+    if (disc.rate > 0) {
+      info.innerHTML = `<div class="group-discount-card">
+        <span>👥 ${disc.label}</span>
+        <span class="group-savings">Save ${fmtCurrency(disc.amount, DB.currency)}</span>
+        <span class="group-final">Total: ${fmtCurrency(disc.finalTotal, DB.currency)}</span>
+      </div>`;
+    } else {
+      info.innerHTML = `<div class="group-hint">💡 Book 5+ passengers for group discount</div>`;
+    }
+  }
+}
+
+function makeBookingV500() {
+  const route = $('bookRoute')?.value;
+  const name = $('bookName')?.value?.trim();
+  const cls = $('bookClass')?.value;
+  const pax = parseInt($('bookPax')?.value) || 1;
+  const tripIdx = parseInt($('bookTrip')?.value) || 0;
+  const date = $('bookDate')?.value;
+  if (!name) { toast('Enter passenger name'); return; }
+  if (!route) { toast('Select a route'); return; }
+  const fare = getPassengerFare(route) || {};
+  const totalFare = (fare[cls]||0) * pax;
+  const disc = calcGroupDiscount(pax, totalFare);
+  const ref = 'OFF-' + Date.now().toString(36).toUpperCase();
+  const booking = { route, name, cls, pax, tripIdx, date, ref, fare: totalFare - disc.amount, discount: disc.amount, discountRate: disc.rate, createdAt: new Date().toISOString() };
+  DB.bookings.push(booking);
+  saveDB();
+  addNotif('🎟️ Booking confirmed: ' + ref, 'success');
+  buildBookingsV500();
+  toast('Booking confirmed! Ref: ' + ref);
+  haptic([20,50,20]);
+}
+
+function shareBooking(idx) {
+  const b = DB.bookings?.[idx];
+  if (!b) return;
+  const schedule = DB.schedules?.[b.route];
+  const trip = schedule?.trips?.[b.tripIdx] || {};
+  const text = `⛴️ Ocean Fast Ferries Booking\n` +
+    `Ref: ${b.ref}\n` +
+    `Route: ${schedule?.title || b.route}\n` +
+    `Passenger: ${b.name}\n` +
+    `Class: ${FARE_CLASS_LABELS[b.cls]||b.cls}\n` +
+    `Pax: ${b.pax}\n` +
+    `Departure: ${trip.dep || 'TBD'}\n` +
+    `Arrival: ${trip.arr || 'TBD'}\n` +
+    `Vessel: ${trip.vessel || 'TBD'}\n` +
+    `Date: ${b.date || 'TBD'}\n` +
+    `Fare: ${fmtCurrency(b.fare||0, DB.currency)}\n` +
+    `${b.discountRate>0?'Discount: '+fmtCurrency(b.discount||0, DB.currency)+' ('+Math.round(b.discountRate*100)+'%)\n':''}` +
+    `\nPowered by Ocean Fast Ferries Pro Ultra`;
+  
+  if (navigator.share) {
+    navigator.share({ title: 'Ferry Booking ' + b.ref, text });
+  } else {
+    // WhatsApp fallback
+    const waText = encodeURIComponent(text.replace(/\n/g, '\n'));
+    window.open('https://wa.me/?text=' + waText, '_blank');
+    toast('Share via WhatsApp');
+  }
+}
+
+// ── Enhanced Dashboard with Animated Counters & Activity Feed (V500) ──
+// This patches the existing buildDashboard to add new features
+const _origBuildDashboard = buildDashboard;
+// We will not override completely; instead inject V500 additions via the dashboard enhancement below
+
+function enhanceDashboardV500() {
+  // Add activity feed to dashboard
+  const dashEl = $('view-dashboard');
+  if (!dashEl) return;
+  
+  // Find the dashboard content and inject new elements
+  const recentActivity = (DB.comps || []).slice(-5).reverse().map(c => {
+    const route = c.route || 'Unknown';
+    const title = DB.schedules?.[route]?.title || titleCase(route);
+    return `<div class="activity-item">
+      <span class="activity-icon">${c.mode==='fragile'?'📦':'🧳'}</span>
+      <div class="activity-info">
+        <span class="activity-route">${title}</span>
+        <span class="activity-detail">${fmtCurrency(c.total||0, DB.currency)} · ${c.weight||0}kg</span>
+      </div>
+      <span class="activity-time">${new Date(c.time||Date.now()).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</span>
+    </div>`;
+  }).join('') || '<div class="activity-empty">No recent activity</div>';
+
+  // Add route popularity mini chart
+  const routeCounts = DB.stats?.routeCounts || {};
+  const topRoutes = Object.entries(routeCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+  const maxCount = topRoutes.reduce((m,r) => Math.max(m,r[1]), 1);
+  const popularityChart = topRoutes.map(([route, count]) => {
+    const pct = count / maxCount * 100;
+    return `<div class="pop-route-item">
+      <span class="pop-route-name">${titleCase(route.replace(/_/g,' → '))}</span>
+      <div class="pop-route-bar-wrap"><div class="pop-route-bar" style="width:${pct}%"></div></div>
+      <span class="pop-route-count">${count}</span>
+    </div>`;
+  }).join('') || '<div class="activity-empty">No route data yet</div>';
+
+  // Inject before the end of dashboard
+  const injectHTML = `
+    <div class="card">
+      <h3>📊 Popular Routes</h3>
+      <div class="pop-routes-chart">${popularityChart}</div>
+    </div>
+    <div class="card">
+      <h3>🕐 Recent Activity</h3>
+      <div class="activity-feed">${recentActivity}</div>
+    </div>
+  `;
+  
+  // Insert at the end of dashboard content
+  const cards = dashEl.querySelectorAll('.card');
+  if (cards.length >= 2) {
+    const lastCard = cards[cards.length - 1];
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = injectHTML;
+    while (tempDiv.firstChild) {
+      dashEl.querySelector('.view-content')?.appendChild(tempDiv.firstChild) || dashEl.appendChild(tempDiv.firstChild);
+    }
+  }
+  
+  // Animate stat counters
+  setTimeout(() => {
+    document.querySelectorAll('.stat-value[data-animate]').forEach(el => {
+      const target = parseInt(el.dataset.animate) || 0;
+      animateCounter(el, target, 800);
+    });
+  }, 200);
+}
+
+
 function initApp() {
   applyTheme();
   buildDrawerMenu();
@@ -1591,8 +2178,13 @@ function initApp() {
   setInterval(updateDynamicBackground, 60000);
   updateDrawerBadges();
   renderNotifCenter();
-  addNotif('Welcome to Ocean Fast Ferries V400 Pro! 🚀', 'info');
-  console.log('⛴️ Ocean Fast Ferries V400 Pro initialized');
+  addNotif('Welcome to Ocean Fast Ferries V500 Ultra! 🚀', 'info');
+  fetchLiveRates().then(ok => { if(ok) addNotif('💱 Live exchange rates updated', 'success'); });
+  setInterval(() => {
+    const alerts = checkDepartureAlerts();
+    if (alerts.length) alerts.forEach(a => addNotif('🚢 ' + a.title + ' departs in ' + a.minutesUntil + 'min!', 'warning'));
+  }, 120000);
+  console.log('⛴️ Ocean Fast Ferries V500 Ultra initialized');
 }
 
 // Start the app

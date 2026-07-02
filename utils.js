@@ -1,6 +1,6 @@
-/* ══════════════════════════════════════════════════════════════════════════
-   Ocean Fast Ferries · Baggage Pro V400 — Utility Module (UPGRADED)
-   ══════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ocean Fast Ferries · Baggage Pro V500 ULTRA — Utility Module (MAJOR UPGRADE)
+   ══════════════════════════════════════════════════════════════════════════════ */
 
 // ── DOM & Formatting ──
 const $ = id => document.getElementById(id);
@@ -9,7 +9,7 @@ const safeId = str => str.replace(/[^a-zA-Z0-9]/g, '_');
 const titleCase = str => String(str || '').replace(/_/g,' ').replace(/\b\w/g, ch => ch.toUpperCase());
 const routeName = key => CEBU_ROUTE_LABELS[key] || (DB.schedules?.[key]?.title || key).replace(/^Cebu to /i,'');
 
-// ── Multi-Currency Conversion (NEW V400) ──
+// ── Multi-Currency Conversion ──
 function convertCurrency(phpAmount, targetCurrency) {
   if (!targetCurrency || targetCurrency === 'PHP') return phpAmount;
   const rate = EXCHANGE_RATES[targetCurrency] || 1;
@@ -24,6 +24,267 @@ function fmtCurrency(amount, currency) {
   return sym + converted.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+// ── Live Currency Update (V500) ──
+async function fetchLiveRates() {
+  try {
+    const res = await fetch(CURRENCY_API_URL, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const data = await res.json();
+    if (data && data.rates) {
+      for (const cur of Object.keys(EXCHANGE_RATES)) {
+        if (cur === 'PHP') continue;
+        if (data.rates[cur]) EXCHANGE_RATES[cur] = data.rates[cur];
+      }
+      safeSetJSON('off_currency_rates_' + new Date().toISOString().slice(0,10), EXCHANGE_RATES);
+      console.log('V500: Live exchange rates updated');
+      return true;
+    }
+  } catch(e) {
+    console.warn('V500: Live currency fetch failed, using cached/hardcoded rates', e.message);
+  }
+  // Try loading yesterday's cached rates
+  try {
+    const cached = safeGetJSON('off_currency_rates_' + new Date().toISOString().slice(0,10), null);
+    if (cached) {
+      for (const cur of Object.keys(cached)) {
+        if (EXCHANGE_RATES[cur] !== undefined) EXCHANGE_RATES[cur] = cached[cur];
+      }
+      return true;
+    }
+  } catch(e2) {}
+  return false;
+}
+
+// ── Group Discount Calculator (V500) ──
+function calcGroupDiscount(paxCount, totalFare) {
+  for (const tier of GROUP_DISCOUNT_TIERS) {
+    if (paxCount >= tier.minPax) {
+      const discount = totalFare * tier.discount;
+      return { rate: tier.discount, amount: discount, label: tier.label, finalTotal: totalFare - discount };
+    }
+  }
+  return { rate: 0, amount: 0, label: 'No group discount', finalTotal: totalFare };
+}
+
+// ── Travel Time Estimator (V500) ──
+function estimateTravelTime(routeKey) {
+  if (!routeKey) return null;
+  // Direct route
+  if (TRAVEL_TIMES_MIN[routeKey]) {
+    return { type: 'direct', totalMinutes: TRAVEL_TIMES_MIN[routeKey], legs: [{ route: routeKey, minutes: TRAVEL_TIMES_MIN[routeKey] }] };
+  }
+  // Connecting route
+  const plan = planRoute(routeKey.split('_')[0], routeKey.split('_').slice(1).join('_'));
+  if (!plan || !plan.legs) return null;
+  const legs = plan.legs.map((leg, i) => {
+    const travelMin = TRAVEL_TIMES_MIN[leg] || 0;
+    const waitMin = (i < plan.legs.length - 1) ? (CONNECTION_WAIT_MIN[leg.split('_')[1]] || 30) : 0;
+    return { route: leg, minutes: travelMin, wait: waitMin };
+  });
+  const totalMinutes = legs.reduce((s, l) => s + l.minutes + l.wait, 0);
+  return { type: plan.type, totalMinutes, legs, via: plan.via || null };
+}
+
+function fmtTravelTime(minutes) {
+  if (!minutes || minutes <= 0) return 'N/A';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}min`;
+}
+
+// ── Moon Phase Calculator (V500) ──
+function getMoonPhase(date) {
+  if (!date) date = new Date();
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  // Simple moon phase approximation (Synodic month ~29.53 days)
+  const knownNewMoon = new Date(2024, 0, 11); // Jan 11 2024 was a new moon
+  const diffMs = date.getTime() - knownNewMoon.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const phase = ((diffDays % 29.53) + 29.53) % 29.53;
+  const index = Math.floor(phase / 29.53 * 8) % 8;
+  return { phase: index, name: MOON_PHASES[index], illumination: Math.round((1 - Math.cos(phase / 29.53 * 2 * Math.PI)) / 2 * 100) };
+}
+
+// ── Sunrise/Sunset Approximation (V500) ──
+function estimateSunTimes(lat, lng, date) {
+  if (!date) date = new Date();
+  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+  // Simplified sunrise/sunset equation for tropical latitudes
+  const latRad = lat * Math.PI / 180;
+  const declination = 23.45 * Math.sin((360 / 365 * (dayOfYear - 81)) * Math.PI / 180) * Math.PI / 180;
+  const hourAngle = Math.acos((-Math.tan(latRad) * Math.tan(declination)));
+  const hourAngleDeg = hourAngle * 180 / Math.PI;
+  const solarNoon = 12 - lng / 15; // approximate
+  const sunrise = solarNoon - hourAngleDeg / 15;
+  const sunset = solarNoon + hourAngleDeg / 15;
+  // Apply Philippines timezone offset (UTC+8)
+  const tzOffset = 8;
+  const fmtHour = h => {
+    const hrs = Math.floor(h + tzOffset);
+    const mins = Math.round((h + tzOffset - Math.floor(h + tzOffset)) * 60);
+    const suffix = hrs >= 12 ? 'PM' : 'AM';
+    const h12 = hrs > 12 ? hrs - 12 : (hrs < 1 ? hrs + 12 : hrs);
+    return `${h12}:${String(mins).padStart(2,'0')} ${suffix}`;
+  };
+  return { sunrise: fmtHour(sunrise), sunset: fmtHour(sunset), daylightHours: Math.round(hourAngleDeg / 7.5 * 10) / 10 };
+}
+
+// ── Tide Estimate (V500) ──
+function estimateTide(port, date) {
+  const moon = getMoonPhase(date);
+  const lat = PORTS[port]?.[0] || 10.3;
+  const sunTimes = estimateSunTimes(lat, PORTS[port]?.[1] || 124, date);
+  // Semi-diurnal tide approximation: 2 high tides, 2 low tides per day
+  // High tide near lunar transit (~6hr intervals)
+  const isSpringTide = moon.phase === 0 || moon.phase === 4; // New or Full moon
+  const isNeapTide = moon.phase === 2 || moon.phase === 6;    // Quarter moons
+  const tideType = isSpringTide ? 'Spring Tide (Extreme)' : isNeapTide ? 'Neap Tide (Moderate)' : 'Normal Tide';
+  const tideRange = isSpringTide ? 'High range (1.5-2.5m)' : isNeapTide ? 'Low range (0.3-0.8m)' : 'Moderate range (0.8-1.5m)';
+  return {
+    moonPhase: moon.name,
+    moonIllumination: moon.illumination + '%',
+    tideType,
+    tideRange,
+    approximateHighTide1: '~6:00 AM (varies by location)',
+    approximateLowTide1: '~12:00 PM (varies by location)',
+    approximateHighTide2: '~6:00 PM (varies by location)',
+    sunrise: sunTimes.sunrise,
+    sunset: sunTimes.sunset,
+    daylightHours: sunTimes.daylightHours + 'h',
+    advisory: isSpringTide ? '⚠️ Spring tide — stronger currents, check with port authority' :
+              isNeapTide ? '✅ Neap tide — calmer waters, ideal for travel' :
+              'Normal tidal conditions expected'
+  };
+}
+
+// ── Expense Tracker Helpers (V500) ──
+function addExpense(tripId, category, amount, description) {
+  if (!DB.expenses) DB.expenses = [];
+  const expense = {
+    id: Date.now(),
+    tripId: tripId || 'general',
+    category: category || 'other',
+    amount: Number(amount) || 0,
+    description: description || '',
+    date: new Date().toISOString(),
+    currency: DB.currency || 'PHP'
+  };
+  DB.expenses.push(expense);
+  safeSetJSON(DB_KEY, DB);
+  return expense;
+}
+
+function getExpensesByTrip(tripId) {
+  if (!DB.expenses) return [];
+  return DB.expenses.filter(e => e.tripId === (tripId || 'general'));
+}
+
+function getExpenseTotals(tripId) {
+  const expenses = getExpensesByTrip(tripId);
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const byCategory = {};
+  expenses.forEach(e => {
+    if (!byCategory[e.category]) byCategory[e.category] = 0;
+    byCategory[e.category] += e.amount;
+  });
+  return { total, byCategory, count: expenses.length };
+}
+
+function removeExpense(id) {
+  if (!DB.expenses) return;
+  DB.expenses = DB.expenses.filter(e => e.id !== id);
+  safeSetJSON(DB_KEY, DB);
+}
+
+// ── Profile Helpers (V500) ──
+function createProfile(name, role) {
+  if (!DB.profiles) DB.profiles = [];
+  const profile = {
+    id: Date.now(),
+    name: name || 'Unnamed',
+    role: role || 'cashier',
+    createdAt: new Date().toISOString(),
+    transactionCount: 0,
+    totalRevenue: 0
+  };
+  DB.profiles.push(profile);
+  DB.activeProfile = profile.id;
+  safeSetJSON(DB_KEY, DB);
+  return profile;
+}
+
+function switchProfile(id) {
+  if (!DB.profiles || !DB.profiles.find(p => p.id === id)) return false;
+  DB.activeProfile = id;
+  safeSetJSON(DB_KEY, DB);
+  return true;
+}
+
+function getActiveProfile() {
+  if (!DB.profiles || !DB.activeProfile) return null;
+  return DB.profiles.find(p => p.id === DB.activeProfile) || null;
+}
+
+// ── Smart Departure Alert Helpers (V500) ──
+function parseDepTime(depStr) {
+  // Parse "5:10AM" or "6:00am" to minutes since midnight
+  const match = String(depStr).trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return null;
+  let h = parseInt(match[1]), m = parseInt(match[2]), ampm = match[3].toUpperCase();
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+}
+
+function getNextDepartureForRoute(routeKey) {
+  const schedule = DB.schedules?.[routeKey];
+  if (!schedule || !schedule.trips?.length) return null;
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  for (const trip of schedule.trips) {
+    const depMin = parseDepTime(trip.dep);
+    if (depMin !== null && depMin > nowMin) {
+      const minutesUntil = depMin - nowMin;
+      return { trip, minutesUntil, depMin, routeKey, title: schedule.title };
+    }
+  }
+  // If no more today, return first trip tomorrow
+  return { trip: schedule.trips[0], minutesUntil: null, depMin: parseDepTime(schedule.trips[0].dep), routeKey, title: schedule.title, tomorrow: true };
+}
+
+function checkDepartureAlerts() {
+  if (!DB.bookings || !DB.bookings.length) return [];
+  const alerts = [];
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  DB.bookings.forEach((booking, idx) => {
+    if (booking.cancelled || booking.alerted) return;
+    const schedule = DB.schedules?.[booking.route];
+    if (!schedule) return;
+    // Find the matching trip
+    const tripIdx = booking.tripIdx || 0;
+    const trip = schedule.trips?.[tripIdx];
+    if (!trip) return;
+    const depMin = parseDepTime(trip.dep);
+    if (depMin === null) return;
+    const minutesUntil = depMin - nowMin;
+    if (minutesUntil > 0 && minutesUntil <= 60) {
+      alerts.push({
+        bookingIdx: idx,
+        booking,
+        trip,
+        minutesUntil,
+        title: schedule.title,
+        depTime: trip.dep
+      });
+    }
+  });
+  return alerts;
+}
+
 // ── Slab Cost Engine ──
 function slabCost(E, rates) {
   const [r0, r1, r2] = rates;
@@ -33,7 +294,7 @@ function slabCost(E, rates) {
   return { t1, t2, t3, c1: t1*r0, c2: t2*r1, c3: t3*r2, total: t1*r0 + t2*r1 + t3*r2 };
 }
 
-// ── Multi-Item Baggage Calculator (NEW V400) ──
+// ── Multi-Item Baggage Calculator ──
 function computeMultiItem(items, route, mode, cls, pax, rounding) {
   if (!DB.slabs[route]?.[mode]) return null;
   const free = mode === 'normal' ? DB.freeAllowance[cls] : 0;
@@ -116,15 +377,13 @@ function applyConnectingPassengerFares() {
   });
 }
 
-// ── Route Planner (NEW V400) ──
+// ── Route Planner ──
 function planRoute(origin, destination) {
   const allRoutes = Object.keys(DB.schedules || {});
-  // Direct route
   const directKey = `${origin}_${destination}`.toLowerCase().replace(/\s/g,'_');
   if (DB.schedules[directKey]) {
     return { type:'direct', route:directKey, title:DB.schedules[directKey].title, legs:[directKey] };
   }
-  // Try connecting routes
   const connectionPorts = ['tagbilaran','maasin','dumaguete','siquijor'];
   for (const via of connectionPorts) {
     const leg1 = `${origin}_${via}`;
@@ -136,7 +395,6 @@ function planRoute(origin, destination) {
       };
     }
   }
-  // Try 2-hop
   for (const via1 of connectionPorts) {
     for (const via2 of connectionPorts) {
       if (via1 === via2) continue;
@@ -169,7 +427,7 @@ function haptic(pattern) {
   navigator.vibrate(pattern || [12]);
 }
 
-// ── Safe localStorage (NEW V400) ──
+// ── Safe localStorage ──
 function safeGetJSON(key, fallback) {
   try {
     const data = localStorage.getItem(key);
@@ -185,7 +443,6 @@ function safeSetJSON(key, value) {
     return true;
   } catch(e) {
     console.warn('Storage write error for', key, e);
-    // Attempt cleanup
     try {
       const oldKeys = ['off_baggage_v14','off_baggage_v13','off_baggage_v12','off_baggage_v11','off_baggage_v10'];
       oldKeys.forEach(k => { if(localStorage.getItem(k)) localStorage.removeItem(k); });
@@ -231,7 +488,7 @@ function buildReceiptPDF(text) {
   let y = 790; const content = [];
   content.push('BT');
   content.push('/F1 18 Tf');
-  content.push(`1 0 0 1 72 ${y} Tm (${pdfEscape('Ocean Fast Ferries Pro')}) Tj`); y -= 26;
+  content.push(`1 0 0 1 72 ${y} Tm (${pdfEscape('Ocean Fast Ferries Pro Ultra')}) Tj`); y -= 26;
   content.push('/F1 11 Tf');
   content.push(`1 0 0 1 72 ${y} Tm (${pdfEscape('Baggage Fee Receipt')}) Tj`); y -= 22;
   content.push('/F1 10 Tf');
@@ -294,16 +551,16 @@ function suggestWeightCategory(weight, mode) {
   return { label:'Bulk Freight', icon:'🚛', tip:'Very heavy cargo — Tier 3 highest rate, consider freight service' };
 }
 
-// ── Weather Helper (NEW V400) ──
+// ── Weather Helper ──
 function getWeatherIcon(code) {
   if (!code) return '🌤️';
   const c = String(code);
-  if (c.startsWith('2')) return '⛈️'; // thunderstorm
-  if (c.startsWith('3')) return '🌧️'; // drizzle
-  if (c.startsWith('5')) return '🌧️'; // rain
-  if (c.startsWith('6')) return '❄️';  // snow
-  if (c === '800') return '☀️';       // clear
-  if (c.startsWith('8')) return '⛅';  // clouds
+  if (c.startsWith('2')) return '⛈️';
+  if (c.startsWith('3')) return '🌧️';
+  if (c.startsWith('5')) return '🌧️';
+  if (c.startsWith('6')) return '❄️';
+  if (c === '800') return '☀️';
+  if (c.startsWith('8')) return '⛅';
   return '🌤️';
 }
 function getSeaCondition(weatherCode, windSpeed) {
@@ -311,4 +568,20 @@ function getSeaCondition(weatherCode, windSpeed) {
   if (wind > 20 || String(weatherCode).startsWith('2')) return { level:'Rough', color:'#ef4444', icon:'🌊', advisory:'Ferry delays possible. Check with terminal.' };
   if (wind > 10 || String(weatherCode).startsWith('5')) return { level:'Moderate', color:'#f59e0b', icon:'🌊', advisory:'Light chop expected. Normal operations.' };
   return { level:'Calm', color:'#22c55e', icon:'🌊', advisory:'Smooth sailing conditions.' };
+}
+
+// ── Animated Counter Helper (V500) ──
+function animateCounter(element, target, duration=800, prefix='', suffix='') {
+  if (!element) return;
+  const start = 0;
+  const startTime = performance.now();
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    const current = Math.round(start + (target - start) * eased);
+    element.textContent = prefix + current.toLocaleString() + suffix;
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
 }

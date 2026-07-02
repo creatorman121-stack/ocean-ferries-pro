@@ -1,9 +1,9 @@
-/* ══════════════════════════════════════════════════════════════════════════
-   Ocean Fast Ferries · Baggage Pro V400 — Data Module (UPGRADED)
-   ══════════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ocean Fast Ferries · Baggage Pro V500 ULTRA — Data Module (MAJOR UPGRADE)
+   ══════════════════════════════════════════════════════════════════════════════ */
 
-const DB_KEY = 'off_baggage_v16';
-const DB_VERSION = 16;
+const DB_KEY = 'off_baggage_v17';
+const DB_VERSION = 17;
 
 const DEFAULT_DB = {
   slabs: {
@@ -207,7 +207,13 @@ const DEFAULT_DB = {
   darkMode: false,
   currency: 'PHP',
   favorites: [],
-  aiSettings: { apiKey:'', useAI:true, model:'auto', timeoutMs:20000, lastStatus:'Not tested yet', lastModel:'', availableModels:[] }
+  aiSettings: { apiKey:'', useAI:true, model:'auto', timeoutMs:20000, lastStatus:'Not tested yet', lastModel:'', availableModels:[] },
+  // ── V500 NEW ──
+  profiles: [],
+  activeProfile: null,
+  expenses: [],
+  checklistState: {},
+  departureAlerts: []
 };
 
 // ── Route Constants ──
@@ -248,7 +254,7 @@ const ROUTE_WAYPOINTS = {
   surigao_cebu:['surigao','maasin','cebu']
 };
 
-// ── Multi-Currency Support (NEW V400) ──
+// ── Multi-Currency Support ──
 const EXCHANGE_RATES = {
   PHP: 1,
   USD: 0.017,
@@ -267,7 +273,7 @@ const CURRENCY_NAMES = {
   GBP: 'British Pound', AUD: 'Australian Dollar', KRW: 'South Korean Won', CNY: 'Chinese Yuan'
 };
 
-// ── Weather Codes for Map Overlay (NEW V400) ──
+// ── Weather Codes for Map Overlay ──
 const WEATHER_REGIONS = [
   { name:'Cebu', lat:10.2945, lng:123.9056, region:'Visayas' },
   { name:'Tagbilaran', lat:9.6496, lng:123.8547, region:'Visayas' },
@@ -283,3 +289,138 @@ const WEATHER_REGIONS = [
   { name:'Calapan', lat:13.4117, lng:121.1803, region:'Luzon' },
   { name:'Batangas', lat:13.7565, lng:121.0583, region:'Luzon' }
 ];
+
+// ══════════════════════════════════════════════════════════════
+// V500 ULTRA — New Data Constants
+// ══════════════════════════════════════════════════════════════
+
+// ── Group Discount Tiers (V500) ──
+const GROUP_DISCOUNT_TIERS = [
+  { minPax:10, discount:0.10, label:'10% off (10+ passengers)' },
+  { minPax:5,  discount:0.05, label:'5% off (5–9 passengers)' },
+  { minPax:0,  discount:0,    label:'No group discount' }
+];
+
+// ── Trip Checklists per Port (V500) ──
+const TRIP_CHECKLISTS = {
+  cebu: {
+    terminal: 'Oceanjet Terminal, Pier 1, Cebu City',
+    documents: ['Valid government ID', 'Printed or digital ticket', 'Student ID (if Student fare)', 'Minor birth certificate (if Minor fare)'],
+    tips: ['Arrive 45 min before departure', 'Terminal fee: ₱25', 'Cebu Pier 1 has food stalls & waiting area', 'Parking available at Pier 1 compound'],
+    connections: ['Tagbilaran (2h)', 'Ormoc (3h)', 'Getafe (1h)', 'Palompon (3h)', 'Maasin (3h)']
+  },
+  tagbilaran: {
+    terminal: 'Oceanjet Terminal, Tagbilaran Port, Bohol',
+    documents: ['Valid government ID', 'Printed or digital ticket', 'Student/Minor ID if applicable'],
+    tips: ['Arrive 30 min before departure', 'Terminal fee: ₱15', 'Connecting ferry to Dumaguete departs 10:40 AM', 'Siquijor connection available', 'Taxis and tricycles available at port'],
+    connections: ['Cebu (2h)', 'Dumaguete (2h)', 'Siquijor (2h)']
+  },
+  dumaguete: {
+    terminal: 'Oceanjet Terminal, Dumaguete Port, Negros Oriental',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Terminal fee: ₱15', 'Close to Rizal Boulevard and city center', 'Siquijor trips available multiple times daily'],
+    connections: ['Tagbilaran (2h)', 'Siquijor (40min)']
+  },
+  siquijor: {
+    terminal: 'Siquijor Port, Siquijor Province',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Small port — limited food options', 'Bring cash — limited ATMs on island', 'Motorcycle rentals available near port'],
+    connections: ['Dumaguete (40min)', 'Tagbilaran (2h)']
+  },
+  ormoc: {
+    terminal: 'Ormoc Port, Leyte',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Terminal fee: ₱15', 'Ormoc is gateway to Western Leyte', 'Bus connections to Tacloban available'],
+    connections: ['Cebu (3h)']
+  },
+  getafe: {
+    terminal: 'Getafe Port, Bohol',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 20 min before departure', 'Small port town — bring snacks', 'Tricycle to town center available'],
+    connections: ['Cebu (1h 15min)']
+  },
+  palompon: {
+    terminal: 'Palompon Port, Leyte',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Kalanggaman Island trips available', 'Limited food at terminal — bring provisions'],
+    connections: ['Cebu (3h)']
+  },
+  maasin: {
+    terminal: 'Maasin Port, Southern Leyte',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Gateway to Surigao connection', 'Maasin Cathedral nearby for tourists'],
+    connections: ['Cebu (3h)', 'Surigao (2h)']
+  },
+  surigao: {
+    terminal: 'Surigao Port, Surigao del Norte',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Gateway to Siargao Island', 'Ferry to Maasin available', 'Multiple food options near port'],
+    connections: ['Maasin (2h)']
+  },
+  bacolod: {
+    terminal: 'Bredco Port, Bacolod City, Negros Occidental',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Terminal near SM City Bacolod', 'Iloilo trips available 4x daily'],
+    connections: ['Iloilo (1h)']
+  },
+  iloilo: {
+    terminal: 'Lapuz Port, Iloilo City',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Near Iloilo Business Park', 'Bacolod trips available 4x daily', 'Airport is 30min from port'],
+    connections: ['Bacolod (1h)']
+  },
+  calapan: {
+    terminal: 'Calapan Port, Oriental Mindoro',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Gateway to Puerto Galera', 'Batangas trips available 4x daily'],
+    connections: ['Batangas (1h 10min)']
+  },
+  batangas: {
+    terminal: 'Batangas Port, Batangas City',
+    documents: ['Valid government ID', 'Printed or digital ticket'],
+    tips: ['Arrive 30 min before departure', 'Gateway to Mindoro', 'Calapan trips available 4x daily', 'Bus terminal adjacent to port'],
+    connections: ['Calapan (1h 10min)']
+  }
+};
+
+// ── Expense Categories (V500) ──
+const EXPENSE_CATEGORIES = [
+  { key:'ticket',  label:'Ferry Ticket',  icon:'🎟️', color:'#3b82f6' },
+  { key:'baggage', label:'Baggage Fee',    icon:'📦', color:'#f43f5e' },
+  { key:'food',    label:'Food & Drinks',  icon:'🍽️', color:'#22c55e' },
+  { key:'transport',label:'Local Transport',icon:'🛺', color:'#f59e0b' },
+  { key:'hotel',   label:'Accommodation',  icon:'🏨', color:'#a855f7' },
+  { key:'activity',label:'Activities/Tours',icon:'🎯', color:'#ec4899' },
+  { key:'shopping',label:'Shopping',       icon:'🛍️', color:'#14b8a6' },
+  { key:'other',   label:'Other',          icon:'📋', color:'#6b7280' }
+];
+
+// ── Travel Time Estimates per Route in Minutes (V500) ──
+const TRAVEL_TIMES_MIN = {
+  cebu_tagbilaran: 120, tagbilaran_cebu: 120,
+  tagbilaran_dumaguete: 120, dumaguete_tagbilaran: 120,
+  siquijor_dumaguete: 40, dumaguete_siquijor: 40,
+  siquijor_tagbilaran: 120, tagbilaran_siquijor: 120,
+  cebu_getafe: 60, getafe_cebu: 75,
+  cebu_ormoc: 180, ormoc_cebu: 180,
+  cebu_palompon: 180, palompon_cebu: 180,
+  cebu_maasin: 180, maasin_cebu: 180,
+  maasin_surigao: 120, surigao_maasin: 120,
+  bacolod_iloilo: 60, iloilo_bacolod: 60,
+  calapan_batangas: 70, batangas_calapan: 70,
+  cebu_dumaguete: 260, cebu_surigao: 330, cebu_siquijor: 260
+};
+
+// ── Connection Wait Times in Minutes (V500) ──
+const CONNECTION_WAIT_MIN = {
+  tagbilaran: 30,  // typical layover at Tagbilaran
+  maasin: 45,      // typical layover at Maasin
+  dumaguete: 20,   // typical layover at Dumaguete
+  siquijor: 25     // typical layover at Siquijor
+};
+
+// ── Moon Phase Names (V500) ──
+const MOON_PHASES = ['🌑 New Moon','🌒 Waxing Crescent','🌓 First Quarter','🌔 Waxing Gibbous','🌕 Full Moon','🌖 Waning Gibbous','🌗 Last Quarter','🌘 Waning Crescent'];
+
+// ── Free Currency API URL (V500) ──
+const CURRENCY_API_URL = 'https://open.er-api.com/v6/latest/PHP';

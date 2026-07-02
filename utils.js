@@ -20,7 +20,7 @@ function fmtCurrency(amount, currency) {
   if (currency === 'PHP') return fmtPHP(amount);
   const sym = CURRENCY_SYMBOLS[currency] || currency;
   const converted = convertCurrency(amount, currency);
-  if (currency === 'JPY' || currency === 'KRW') return sym + Math.round(converted).toLocaleString();
+  if (currency === 'JPY' || currency === 'KRW') return sym + Math.round(converted).toLocaleString('en-US');
   return sym + converted.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 

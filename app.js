@@ -19,6 +19,12 @@ window.DB = DB;
     if (DB.bookings && DB.bookings.length) preserved.bookings = DB.bookings;
     if (DB.currency) preserved.currency = DB.currency;
     if (DB.favorites && DB.favorites.length) preserved.favorites = DB.favorites;
+    // V500 fields
+    if (DB.profiles) preserved.profiles = DB.profiles;
+    if (DB.activeProfile) preserved.activeProfile = DB.activeProfile;
+    if (DB.expenses && DB.expenses.length) preserved.expenses = DB.expenses;
+    if (DB.checklistState) preserved.checklistState = DB.checklistState;
+    if (DB.departureAlerts) preserved.departureAlerts = DB.departureAlerts;
     DB = JSON.parse(JSON.stringify(DEFAULT_DB));
     DB._version = DB_VERSION;
     for (const key of Object.keys(preserved)) DB[key] = preserved[key];
@@ -244,7 +250,7 @@ function buildDashboard() {
   const todayRev = todayTx.reduce((a,c) => a + Number(c.total||0), 0);
   const noteText = loadNote();
   const noteHtml = noteText
-    ? `<div class="note-text">${noteText.replace(/</g,'<')}</div>`
+    ? `<div class="note-text">${noteText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
     : `<div class="note-placeholder">Tap Edit to add shift notes, supervisor info, vessel changes...</div>`;
 
   const counts = {};
@@ -765,50 +771,7 @@ function executePlanRoute() {
 
 // ── Booking System (NEW V400) ──
 function buildBookings() {
-  // V500 Enhanced - redirect to V500 version
-  buildBookingsV500(); return;
-  const bookings = DB.bookings || [];
-  $('view-bookings').innerHTML = `
-    <div class="card glow">
-      <div class="card-header">🎫 Bookings & Reservations</div>
-      <div class="input-group"><label>Route</label>
-        <select id="bookRoute">${CEBU_BAGGAGE_ROUTES.map(k => `<option value="${k}">${routeName(k)}</option>`).join('')}</select>
-      </div>
-      <div class="grid2">
-        <div class="input-group"><label>Passenger Name</label><input id="bookName" placeholder="Full name"></div>
-        <div class="input-group"><label>Class</label><select id="bookClass"><option value="TC/OA">Tourist/Open Air</option><option value="BC">Business Class</option><option value="ST">Student</option><option value="MI">Minor</option></select></div>
-      </div>
-      <div class="grid2">
-        <div class="input-group"><label>Passengers</label><input type="number" id="bookPax" value="1" min="1"></div>
-        <div class="input-group"><label>Trip</label><select id="bookTrip"><option value="">Select after route</option></select></div>
-      </div>
-      <div class="input-group"><label>Date</label><input type="date" id="bookDate" value="${new Date().toISOString().slice(0,10)}"></div>
-      <button class="primary block" onclick="makeBooking()">🎫 Book Now</button>
-    </div>
-    <div class="card">
-      <div class="card-header" style="justify-content:space-between"><span>📋 Your Bookings</span><span style="font-size:.68rem;color:var(--text3)">${bookings.length} total</span></div>
-      <div id="bookList">${bookings.length ? bookings.slice().reverse().map((b,i) => `
-        <div style="padding:10px;border-bottom:1px solid var(--border)">
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--accent);font-weight:700">${routeName(b.route)}</span><span style="font-weight:700">${fmtPHP(b.fare)}</span></div>
-          <div style="font-size:.72rem;color:var(--text2)">${b.name} · ${b.cls} · ${b.pax}pax · ${b.date}</div>
-          <div style="font-size:.68rem;color:var(--text3)">${b.trip || 'Any trip'} · Booked: ${(b.time||'').slice(0,10)}</div>
-          <div style="margin-top:4px;display:flex;gap:6px">
-            <button class="sm" onclick="viewBookingQR(${bookings.length-1-i})">📱 QR</button>
-            <button class="sm" style="color:#f87171;border-color:rgba(239,68,68,.3)" onclick="cancelBooking(${bookings.length-1-i})">Cancel</button>
-          </div>
-        </div>
-      `).join('') : '<div style="color:var(--text3);font-size:.78rem;padding:10px">No bookings yet.</div>'}</div>
-    </div>`;
-  // Populate trips when route changes
-  const routeSel = $('bookRoute');
-  if (routeSel) {
-    routeSel.onchange = () => {
-      const trips = DB.schedules[routeSel.value]?.trips || [];
-      const tripSel = $('bookTrip');
-      if (tripSel) tripSel.innerHTML = trips.map((t,i) => `<option value="${t.dep} - ${t.vessel}">${t.dep} (${t.vessel}) → ${t.arr||'--'}</option>`).join('') || '<option>No trips</option>';
-    };
-    routeSel.onchange();
-  }
+  buildBookingsV500();
 }
 function makeBooking() {
   const route = $('bookRoute')?.value, name = $('bookName')?.value?.trim(), cls = $('bookClass')?.value;
@@ -1445,7 +1408,7 @@ function checkDepartures() {
   const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
   const alerts=[];
   Object.keys(DB.schedules||{}).forEach(k=>{
-    if(!/^cebu_/.test(k)) return;
+    if(!/^[a-z]+_[a-z]+$/i.test(k)) return;
     (DB.schedules[k].trips||[]).forEach(t=>{
       const m=String(t.dep).trim().match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i); if(!m)return;
       let h=+m[1],mn=+m[2],ap=(m[3]||'').toUpperCase();
@@ -1489,10 +1452,7 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.shiftKey&&e.key==='S'){e.preventDefault();showShiftTimer();}
 });
 
-// ── Haptic Feedback ──
-function haptic(pattern=[10]) {
-  if(navigator.vibrate) navigator.vibrate(pattern);
-}
+// haptic is defined in utils.js
 document.addEventListener('click',e=>{
   const btn=e.target.closest('button,.drawer-item,.tally-btn,.hamburger,.bnav-item');
   if(btn) haptic(btn.classList.contains('primary')?[18]:[8]);
@@ -1510,7 +1470,7 @@ function sendAIChat() {
   const msg=input.value.trim(); if(!msg)return;
   input.value='';
   const body=$('chatBody');
-  body.innerHTML+=`<div class="chat-bubble user">${msg.replace(/</g,'<')}</div>`;
+  body.innerHTML+=`<div class="chat-bubble user">${msg.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
   body.innerHTML+=`<div class="loading-dot" id="chatLoading"><span></span><span></span><span></span></div>`;
   body.scrollTop=body.scrollHeight;
 
@@ -1533,7 +1493,7 @@ function sendAIChat() {
   }).then(r=>r.json()).then(data=>{
     const ld=$('chatLoading');if(ld)ld.remove();
     const text=data?.candidates?.[0]?.content?.parts?.[0]?.text||'Sorry, I could not generate a response.';
-    body.innerHTML+=`<div class="chat-bubble bot">${text.replace(/</g,'<')}</div>`;
+    body.innerHTML+=`<div class="chat-bubble bot">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
     chatContext.push({role:'model',parts:[{text}]});
     body.scrollTop=body.scrollHeight;
   }).catch(err=>{
@@ -1751,7 +1711,7 @@ function buildChecklist() {
           const key = 'doc_'+i;
           const checked = savedChecks[key];
           return `<label class="checklist-item ${checked?'checked':''}">
-            <input type="checkbox" ${checked?'checked':''} onchange="toggleChecklist('${selectedPort}','${key}',this.checked)">
+            <input type="checkbox" ${checked?'checked':''} onchange="toggleChecklist('${selectedPort}','${key}',this.checked,this.closest('.checklist-item'))">
             <span class="checklist-box"></span>
             <span class="checklist-text">${doc}</span>
           </label>`;
@@ -1818,14 +1778,13 @@ function changeChecklistPort(port) {
   buildChecklist();
 }
 
-function toggleChecklist(port, key, checked) {
+function toggleChecklist(port, key, checked, el) {
   if (!DB.checklistState) DB.checklistState = {};
   if (!DB.checklistState[port]) DB.checklistState[port] = {};
   DB.checklistState[port][key] = checked;
   saveDB();
   // Update visual
-  const item = event.target.closest('.checklist-item');
-  if (item) item.classList.toggle('checked', checked);
+  if (el) el.classList.toggle('checked', checked);
   haptic([8]);
 }
 
@@ -2057,7 +2016,7 @@ function makeBookingV500() {
   const totalFare = (fare[cls]||0) * pax;
   const disc = calcGroupDiscount(pax, totalFare);
   const ref = 'OFF-' + Date.now().toString(36).toUpperCase();
-  const booking = { route, name, cls, pax, tripIdx, date, ref, fare: totalFare - disc.amount, discount: disc.amount, discountRate: disc.rate, createdAt: new Date().toISOString() };
+  const booking = { route, name, cls, pax, tripIdx, date, ref, fare: totalFare - disc.amount, discount: disc.amount, discountRate: disc.rate, time: new Date().toISOString(), cancelled: false, createdAt: new Date().toISOString() };
   DB.bookings.push(booking);
   saveDB();
   addNotif('🎟️ Booking confirmed: ' + ref, 'success');
@@ -2147,11 +2106,10 @@ function enhanceDashboardV500() {
   // Insert at the end of dashboard content
   const cards = dashEl.querySelectorAll('.card');
   if (cards.length >= 2) {
-    const lastCard = cards[cards.length - 1];
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = injectHTML;
     while (tempDiv.firstChild) {
-      dashEl.querySelector('.view-content')?.appendChild(tempDiv.firstChild) || dashEl.appendChild(tempDiv.firstChild);
+      dashEl.appendChild(tempDiv.firstChild);
     }
   }
   

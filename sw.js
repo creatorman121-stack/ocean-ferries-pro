@@ -2,7 +2,7 @@
    Ocean Fast Ferries · V500 ULTRA — Service Worker
    ══════════════════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'off-v501-cache';
+const CACHE = 'off-v502-cache';
 const APP_VERSION = 'V500';
 const BASE = '/ocean-ferries-pro';
 

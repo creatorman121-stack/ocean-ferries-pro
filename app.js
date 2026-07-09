@@ -2137,6 +2137,7 @@ function initApp() {
   updateDrawerBadges();
   renderNotifCenter();
   addNotif('Welcome to Ocean Fast Ferries V500 Ultra! 🚀', 'info');
+  addNotif('⛽ Fares updated July 10, 2026 — temporary fuel surcharge reduced (MARINA Advisory 2026-35). New fares now in effect across all routes.', 'success');
   fetchLiveRates().then(ok => { if(ok) addNotif('💱 Live exchange rates updated', 'success'); });
   setInterval(() => {
     const alerts = checkDepartureAlerts();

@@ -3,7 +3,7 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 
 const DB_KEY = 'off_baggage_v17';
-const DB_VERSION = 18;
+const DB_VERSION = 19;
 
 const DEFAULT_DB = {
   slabs: {
@@ -34,32 +34,36 @@ const DEFAULT_DB = {
     cebu_siquijor:           { normal:[20,27.5,32.5], fragile:[35,50,70] }
   },
   freeAllowance: { tourist:10, business:20 },
+  // Fares updated per OceanJet Advisory — Temporary Fuel Surcharge reduction,
+  // effective July 10, 2026 (MARINA Advisory No. 2026-35).
+  // TC/OA & BC per advisory; ST = 80% of TC/OA; MI = 50% of TC/OA (rounded).
+  // Connecting routes (cebu_dumaguete/cebu_surigao/cebu_siquijor) = sum of legs.
   paxFares: {
-    cebu_tagbilaran:         {'TC/OA':920,  'BC':1450, 'ST':736,  'MI':460},
-    tagbilaran_cebu:         {'TC/OA':920,  'BC':1450, 'ST':736,  'MI':460},
-    tagbilaran_siquijor:     {'TC/OA':950,  'BC':1450, 'ST':760,  'MI':475},
-    siquijor_tagbilaran:     {'TC/OA':950,  'BC':1450, 'ST':760,  'MI':475},
-    tagbilaran_dumaguete:    {'TC/OA':1080, 'BC':1680, 'ST':864,  'MI':540},
-    dumaguete_tagbilaran:    {'TC/OA':1080, 'BC':1680, 'ST':864,  'MI':540},
-    dumaguete_siquijor:      {'TC/OA':420,  'BC':700,  'ST':336,  'MI':210},
-    siquijor_dumaguete:      {'TC/OA':420,  'BC':700,  'ST':336,  'MI':210},
-    iloilo_bacolod:          {'TC/OA':700,  'BC':1000, 'ST':570,  'MI':350},
-    bacolod_iloilo:          {'TC/OA':700,  'BC':1000, 'ST':570,  'MI':350},
-    cebu_getafe:             {'TC/OA':540,  'BC':960,  'ST':432,  'MI':270},
-    getafe_cebu:             {'TC/OA':540,  'BC':960,  'ST':432,  'MI':270},
-    cebu_ormoc:              {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    ormoc_cebu:              {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    cebu_palompon:           {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    palompon_cebu:           {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    cebu_maasin:             {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    maasin_cebu:             {'TC/OA':1320, 'BC':1920, 'ST':1056, 'MI':660},
-    maasin_surigao:          {'TC/OA':960,  'BC':1450, 'ST':768,  'MI':480},
-    surigao_maasin:          {'TC/OA':960,  'BC':1450, 'ST':768,  'MI':480},
+    cebu_tagbilaran:         {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
+    tagbilaran_cebu:         {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
+    tagbilaran_siquijor:     {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
+    siquijor_tagbilaran:     {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
+    tagbilaran_dumaguete:    {'TC/OA':990,  'BC':1540, 'ST':792,  'MI':495},
+    dumaguete_tagbilaran:    {'TC/OA':990,  'BC':1540, 'ST':792,  'MI':495},
+    dumaguete_siquijor:      {'TC/OA':385,  'BC':638,  'ST':308,  'MI':193},
+    siquijor_dumaguete:      {'TC/OA':385,  'BC':638,  'ST':308,  'MI':193},
+    iloilo_bacolod:          {'TC/OA':605,  'BC':880,  'ST':484,  'MI':303},
+    bacolod_iloilo:          {'TC/OA':605,  'BC':880,  'ST':484,  'MI':303},
+    cebu_getafe:             {'TC/OA':495,  'BC':880,  'ST':396,  'MI':248},
+    getafe_cebu:             {'TC/OA':495,  'BC':880,  'ST':396,  'MI':248},
+    cebu_ormoc:              {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    ormoc_cebu:              {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    cebu_palompon:           {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    palompon_cebu:           {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    cebu_maasin:             {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    maasin_cebu:             {'TC/OA':1210, 'BC':1760, 'ST':968,  'MI':605},
+    maasin_surigao:          {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
+    surigao_maasin:          {'TC/OA':880,  'BC':1320, 'ST':704,  'MI':440},
     calapan_batangas:        {'TC/OA':600,  'BC':850,  'ST':480,  'MI':300},
     batangas_calapan:        {'TC/OA':600,  'BC':850,  'ST':480,  'MI':300},
-    cebu_dumaguete:          {'TC/OA':2000, 'BC':3130, 'ST':1600, 'MI':1000},
-    cebu_surigao:            {'TC/OA':2280, 'BC':3370, 'ST':1824, 'MI':1140},
-    cebu_siquijor:           {'TC/OA':1870, 'BC':2900, 'ST':1496, 'MI':935}
+    cebu_dumaguete:          {'TC/OA':1870, 'BC':2860, 'ST':1496, 'MI':935},
+    cebu_surigao:            {'TC/OA':2090, 'BC':3080, 'ST':1672, 'MI':1045},
+    cebu_siquijor:           {'TC/OA':1760, 'BC':2640, 'ST':1408, 'MI':880}
   },
   schedules: {
     cebu_tagbilaran: { title:'Cebu to Tagbilaran', travel:'2h', trips:[
